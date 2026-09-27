@@ -27,6 +27,42 @@ function failureFromBody(data: unknown): { ok: false; message: string } | null {
   return null;
 }
 
+function isStoryPayload(
+  data: unknown,
+  pageCount: number
+): data is {
+  ok: true;
+  cast: Cast;
+  pages: { pageNumber: number; script: string; sceneDescription: string }[];
+} {
+  if (typeof data !== 'object' || data === null) return false;
+  const rec = data as Record<string, unknown>;
+  if (rec.ok !== true || typeof rec.cast !== 'object' || rec.cast === null) return false;
+  if (!Array.isArray(rec.pages) || rec.pages.length !== pageCount) return false;
+  return rec.pages.every((page, index) => {
+    if (typeof page !== 'object' || page === null) return false;
+    const item = page as Record<string, unknown>;
+    return (
+      item.pageNumber === index + 1 &&
+      typeof item.script === 'string' &&
+      typeof item.sceneDescription === 'string'
+    );
+  });
+}
+
+function isIllustrationPayload(
+  data: unknown
+): data is { ok: true; mediaType: 'image/png'; imageBase64: string } {
+  if (typeof data !== 'object' || data === null) return false;
+  const rec = data as Record<string, unknown>;
+  return (
+    rec.ok === true &&
+    rec.mediaType === 'image/png' &&
+    typeof rec.imageBase64 === 'string' &&
+    rec.imageBase64.length > 0
+  );
+}
+
 async function parseJsonResponse(res: Response): Promise<unknown | null> {
   try {
     return await res.json();
@@ -91,11 +127,10 @@ export async function requestStory(body: {
     }
     const failure = failureFromBody(data);
     if (failure) return failure;
-    return data as {
-      ok: true;
-      cast: Cast;
-      pages: { pageNumber: number; script: string; sceneDescription: string }[];
-    };
+    if (!isStoryPayload(data, body.breakdownPageCount)) {
+      return { ok: false, message: GENERATION_FAILED };
+    }
+    return data;
   } catch {
     return { ok: false, message: GENERATION_FAILED };
   }
@@ -126,7 +161,10 @@ export async function requestIllustration(body: {
     }
     const failure = failureFromBody(data);
     if (failure) return failure;
-    return data as { ok: true; mediaType: 'image/png'; imageBase64: string };
+    if (!isIllustrationPayload(data)) {
+      return { ok: false, message: GENERATION_FAILED };
+    }
+    return data;
   } catch {
     return { ok: false, message: GENERATION_FAILED };
   }

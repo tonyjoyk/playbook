@@ -67,6 +67,9 @@ function App() {
     canRedoComposite,
     vectorizeStage,
     markExported,
+    generationStatus,
+    generateStory,
+    retryIllustration,
   } = useProject();
 
   const { message, visible, showToast } = useToast();
@@ -139,6 +142,12 @@ function App() {
     <div className="app">
       <Header
         project={project}
+        generationStatus={generationStatus}
+        onRetry={() => {
+          if (generationStatus.phase === 'error' && generationStatus.pageIndex !== null) {
+            void retryIllustration(generationStatus.pageIndex);
+          }
+        }}
         onTitleChange={(title) => setProject((p) => ({ ...p, title }))}
         onOpenStorySetup={() => setStoryModalOpen(true)}
         onOpenStyle={() => setStyleModalOpen(true)}
@@ -268,6 +277,8 @@ function App() {
         project={project}
         onClose={() => setStoryModalOpen(false)}
         onChange={(patch) => setProject((p) => ({ ...p, ...patch }))}
+        onGenerate={() => void generateStory()}
+        generationStatus={generationStatus}
         showToast={showToast}
       />
 
@@ -275,6 +286,7 @@ function App() {
         open={styleModalOpen}
         project={project}
         onClose={() => setStyleModalOpen(false)}
+        onChange={(patch) => setProject((p) => ({ ...p, ...patch }))}
       />
 
       <RasterLightbox

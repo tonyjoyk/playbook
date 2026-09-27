@@ -1,5 +1,6 @@
 import { buildBreakdownPrompt } from '../lib/prompts';
 import { copyToClipboard } from '../lib/clipboard';
+import type { GenerationStatus } from '../hooks/useProject';
 import type { Project } from '../types';
 
 type StorySetupModalProps = {
@@ -7,6 +8,8 @@ type StorySetupModalProps = {
   project: Project;
   onClose: () => void;
   onChange: (patch: Partial<Project>) => void;
+  onGenerate: () => void;
+  generationStatus: GenerationStatus;
   showToast: (msg: string) => void;
 };
 
@@ -15,8 +18,17 @@ export function StorySetupModal({
   project,
   onClose,
   onChange,
+  onGenerate,
+  generationStatus,
   showToast,
 }: StorySetupModalProps) {
+  const busy = generationStatus.phase === 'story' || generationStatus.phase === 'illustration';
+  const statusLine =
+    generationStatus.phase === 'error'
+      ? generationStatus.message
+      : generationStatus.phase === 'story'
+        ? 'Writing the story.'
+        : null;
   const breakdownPrompt = buildBreakdownPrompt({
     theme: project.theme,
     detailedWriteup: project.detailedWriteup,
@@ -105,12 +117,22 @@ export function StorySetupModal({
               </button>
               {breakdownPrompt}
             </div>
+            {statusLine ? (
+              <p className="hint" role="status">
+                {statusLine}
+              </p>
+            ) : null}
             <div className="row" style={{ marginTop: 10 }}>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={busy || project.theme.trim() === ''}
+                onClick={onGenerate}
+              >
+                Generate
+              </button>
               <button type="button" className="btn btn-ghost" onClick={() => void copyBreakdown()}>
                 Copy prompt
-              </button>
-              <button type="button" className="btn btn-primary" onClick={onClose}>
-                I&apos;ve got my breakdown →
               </button>
             </div>
           </div>

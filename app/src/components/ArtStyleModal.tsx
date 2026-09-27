@@ -1,14 +1,15 @@
-import { getArtStyle } from '../lib/artStyles';
+import { ART_STYLES } from '../lib/artStyles';
 import type { Project } from '../types';
 
 type ArtStyleModalProps = {
   open: boolean;
   project: Project;
   onClose: () => void;
+  onChange: (patch: Partial<Project>) => void;
 };
 
-export function ArtStyleModal({ open, project, onClose }: ArtStyleModalProps) {
-  const style = getArtStyle(project.artStyleId);
+export function ArtStyleModal({ open, project, onClose, onChange }: ArtStyleModalProps) {
+  const styles = Object.values(ART_STYLES);
 
   return (
     <div
@@ -30,25 +31,30 @@ export function ArtStyleModal({ open, project, onClose }: ArtStyleModalProps) {
             change it anytime.
           </div>
           <div className="style-grid">
-            <div className="style-card">
-              <img src={style.referenceImageUrl} alt={`${style.name} reference`} />
-              <div className="style-card-body">
-                <div className="style-card-title">
-                  <strong style={{ fontFamily: 'Fraunces, serif' }}>{style.name}</strong>
-                  <span className="soon selected">✓ Selected</span>
-                </div>
-                <div className="note" style={{ marginTop: 4 }}>
-                  {style.description}
-                </div>
-              </div>
-            </div>
-            <div className="style-placeholder">
-              <div>
-                <div style={{ fontSize: 26 }}>＋</div>
-                <div style={{ fontWeight: 800, marginTop: 6 }}>More styles</div>
-                <div className="note">Coming soon</div>
-              </div>
-            </div>
+            {styles.map((style) => {
+              const selected = style.id === project.artStyleId;
+              return (
+                <button
+                  key={style.id}
+                  type="button"
+                  className="style-card"
+                  onClick={() => onChange({ artStyleId: style.id })}
+                >
+                  {style.referenceImageUrl ? (
+                    <img src={style.referenceImageUrl} alt="" />
+                  ) : null}
+                  <div className="style-card-body">
+                    <div className="style-card-title">
+                      <strong style={{ fontFamily: 'Fraunces, serif' }}>{style.name}</strong>
+                      {selected ? <span className="soon selected">Selected</span> : null}
+                    </div>
+                    <div className="note" style={{ marginTop: 4 }}>
+                      {style.description}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
           </div>
           <div className="row" style={{ justifyContent: 'flex-end' }}>
             <button type="button" className="btn btn-primary" onClick={onClose}>
