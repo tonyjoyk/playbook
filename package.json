@@ -1,0 +1,17 @@
+{
+  "name": "storybook-generator",
+  "version": "0.1.0",
+  "description": "Procedural folk-art gouache children's-book scene generator (pure SVG -> PNG).",
+  "type": "module",
+  "scripts": {
+    "gate": "node src/scripts/gate.js",
+    "scene": "node src/scripts/generate.js",
+    "pal": "npm run dev --prefix app",
+    "pal:build": "npm run build --prefix app",
+    "pal:wasm": "npm run wasm:build --prefix app"
+  },
+  "dependencies": {
+    "@resvg/resvg-js": "^2.6.2",
+    "simplex-noise": "^4.0.3"
+  }
+}

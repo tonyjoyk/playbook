@@ -1,0 +1,31 @@
+{
+  "bedroom": {
+    "fixture": "bedroom-crop.png",
+    "mask": "bedroom-crop-mask.png",
+    "click": {
+      "x": 118,
+      "y": 100
+    },
+    "iouMin": 0.75
+  },
+  "subway": {
+    "fixture": "subway-crop.png",
+    "mask": "subway-crop-mask.png",
+    "click": {
+      "x": 90,
+      "y": 120
+    },
+    "negative": [
+      {
+        "x": 248,
+        "y": 125
+      }
+    ],
+    "iouMin": 0.7,
+    "maxComponents": 3
+  },
+  "diptych": {
+    "fixture": "diptych-full.png",
+    "splitX": 320
+  }
+}

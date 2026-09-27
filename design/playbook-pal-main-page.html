@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Playbook Pal — Storybook Editor (MVP reference UI)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F6EFE2; --paper-2:#FBF7EE; --card:#FFFFFF;
+    --ink:#3A2F2A; --ink-soft:#6E6259; --line:#E7DECF;
+    --coral:#D4837A; --coral-deep:#C25F5A; --green:#5E7A50; --teal:#3D6B63;
+    --sky:#BCD8E0; --accent:#C97A4A;
+    --shadow:0 8px 28px rgba(58,47,42,.10); --shadow-sm:0 2px 8px rgba(58,47,42,.08);
+    --r:14px; --r-sm:10px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    font-family:'Nunito',system-ui,sans-serif;color:var(--ink);
+    background:var(--paper);
+    background-image:radial-gradient(circle at 18% -10%, #FCEDE9 0, transparent 38%),
+                     radial-gradient(circle at 90% 0%, #E7F0EC 0, transparent 35%);
+    display:flex;flex-direction:column;height:100vh;overflow:hidden;
+  }
+  h1,h2,h3{font-family:'Fraunces',Georgia,serif;font-weight:600;margin:0}
+  button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+  .muted{color:var(--ink-soft)}
+
+  /* ---------- top bar ---------- */
+  header{
+    display:flex;align-items:center;gap:18px;padding:12px 20px;
+    background:rgba(251,247,238,.85);backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--line);z-index:20;
+  }
+  .brand{display:flex;align-items:center;gap:10px;font-family:'Fraunces',serif;font-size:20px;font-weight:600}
+  .logo{width:34px;height:34px;border-radius:10px;background:
+     linear-gradient(135deg,var(--coral),var(--accent));display:grid;place-items:center;
+     box-shadow:var(--shadow-sm);color:#fff;font-size:18px}
+  .title-edit{display:flex;align-items:center;gap:8px;margin-left:6px}
+  .title-edit input{
+    font-family:'Fraunces',serif;font-size:16px;color:var(--ink);background:transparent;
+    border:1px solid transparent;border-radius:8px;padding:5px 9px;width:230px;
+  }
+  .title-edit input:hover{border-color:var(--line);background:#fff}
+  .title-edit input:focus{outline:none;border-color:var(--coral);background:#fff}
+
+  /* stepper */
+  .steps{display:flex;align-items:center;gap:6px;margin:0 auto}
+  .step{display:flex;align-items:center;gap:8px;padding:7px 14px;border-radius:999px;
+    color:var(--ink-soft);font-weight:700;font-size:13.5px}
+  .step .dot{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;
+    background:#EDE3D3;color:var(--ink-soft);font-size:12px;font-weight:800}
+  .step.active{background:#fff;color:var(--ink);box-shadow:var(--shadow-sm)}
+  .step.active .dot{background:var(--coral);color:#fff}
+  .step.done .dot{background:var(--green);color:#fff}
+  .step-sep{width:14px;height:2px;background:var(--line);border-radius:2px}
+  .step.clickable{cursor:pointer}
+  .step.clickable:hover{color:var(--ink)}
+
+  .btn{padding:9px 16px;border-radius:999px;font-weight:800;font-size:14px;display:inline-flex;
+    align-items:center;gap:8px;transition:.15s}
+  .btn-primary{background:var(--coral);color:#fff;box-shadow:var(--shadow-sm)}
+  .btn-primary:hover{background:var(--coral-deep)}
+  .btn-ghost{background:#fff;border:1px solid var(--line);color:var(--ink)}
+  .btn-ghost:hover{border-color:var(--coral)}
+
+  /* ---------- layout ---------- */
+  main{flex:1;display:grid;grid-template-columns:230px 1fr 340px;min-height:0}
+  .col{min-height:0;display:flex;flex-direction:column}
+
+  /* page rail */
+  .rail{background:var(--paper-2);border-right:1px solid var(--line)}
+  .rail-head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px 8px}
+  .rail-head h3{font-size:14px;letter-spacing:.02em;text-transform:uppercase;color:var(--ink-soft)}
+  .rail-list{overflow-y:auto;padding:6px 14px 14px;display:flex;flex-direction:column;gap:12px}
+  .thumb{position:relative;border-radius:var(--r-sm);cursor:pointer}
+  .thumb .frame{display:flex;gap:9px;align-items:flex-start}
+  .thumb .num{font-weight:800;color:var(--ink-soft);width:14px;text-align:right;padding-top:18px;font-size:13px}
+  .thumb .pic{flex:1;aspect-ratio:4/3;border-radius:9px;border:2px solid var(--line);
+    background:#fff center/cover;overflow:hidden;display:grid;place-items:center;transition:.15s}
+  .thumb .pic .blank{color:#C9BEAC;font-size:12px;font-weight:700;text-align:center;line-height:1.3}
+  .thumb.active .pic{border-color:var(--coral);box-shadow:0 0 0 3px rgba(212,131,122,.18)}
+  .thumb:hover .pic{border-color:var(--coral)}
+  .thumb .cap{font-size:11.5px;color:var(--ink-soft);margin:5px 0 0 23px;white-space:nowrap;
+    overflow:hidden;text-overflow:ellipsis;max-width:160px}
+  .thumb .tools{position:absolute;top:4px;right:4px;display:none;gap:4px}
+  .thumb:hover .tools{display:flex}
+  .thumb .tools button{width:22px;height:22px;border-radius:6px;background:rgba(255,255,255,.92);
+    box-shadow:var(--shadow-sm);font-size:12px;display:grid;place-items:center}
+  .add-page{margin:2px 0 0 23px;padding:10px;border:2px dashed var(--line);border-radius:9px;
+    color:var(--ink-soft);font-weight:700;font-size:13px;background:#fff;transition:.15s}
+  .add-page:hover{border-color:var(--coral);color:var(--coral)}
+
+  /* canvas */
+  .stage{background:
+      repeating-linear-gradient(45deg,#F1E8D8 0 2px,transparent 2px 22px),var(--paper);
+      align-items:center;justify-content:center;position:relative;overflow:auto;padding:28px}
+  .canvas-wrap{display:flex;flex-direction:column;align-items:center;gap:14px}
+  .page-canvas{width:min(70vh,620px);aspect-ratio:4/3;background:#fff;border-radius:12px;
+    box-shadow:var(--shadow);overflow:hidden;position:relative;border:1px solid #EadFce}
+  .page-canvas .art{position:absolute;inset:0;background-size:cover;background-position:center}
+  .empty-state{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;gap:14px;text-align:center;padding:30px;color:var(--ink-soft)}
+  .empty-ico{width:62px;height:62px;border-radius:16px;background:#F4EADb;display:grid;place-items:center;font-size:28px}
+  .caption-band{position:absolute;left:0;right:0;bottom:0;padding:14px 20px;
+    background:rgba(246,239,226,.92);font-family:'Fraunces',serif;font-size:15px;line-height:1.4;
+    border-top:1px solid rgba(231,222,207,.8)}
+  .stage-foot{display:flex;align-items:center;gap:14px;color:var(--ink-soft);font-size:13px;font-weight:700}
+  .zoom{display:flex;gap:2px;background:#fff;border:1px solid var(--line);border-radius:999px;padding:3px}
+  .zoom button{width:26px;height:26px;border-radius:50%;font-weight:800}
+  .zoom button:hover{background:var(--paper)}
+
+  /* inspector */
+  .inspector{background:#fff;border-left:1px solid var(--line);overflow-y:auto}
+  .insp-head{padding:16px 18px 0}
+  .insp-head .pg{font-size:12px;font-weight:800;color:var(--coral);text-transform:uppercase;letter-spacing:.05em}
+  .insp-head h2{font-size:19px;margin-top:3px}
+  .tabs{display:flex;gap:4px;padding:12px 18px 0;border-bottom:1px solid var(--line)}
+  .tab{padding:8px 12px;font-weight:800;font-size:13px;color:var(--ink-soft);border-bottom:2.5px solid transparent}
+  .tab.active{color:var(--ink);border-color:var(--coral)}
+  .tab:hover{color:var(--ink)}
+  .panel{padding:18px;display:none;flex-direction:column;gap:16px}
+  .panel.active{display:flex}
+  .field label{display:block;font-weight:800;font-size:13px;margin-bottom:6px}
+  .field .hint{font-weight:600;font-size:12px;color:var(--ink-soft);margin:-2px 0 7px}
+  textarea,.fauxbox{width:100%;border:1px solid var(--line);border-radius:var(--r-sm);
+    padding:11px 12px;font-family:inherit;font-size:14px;color:var(--ink);background:var(--paper-2);
+    resize:vertical;line-height:1.5}
+  textarea:focus{outline:none;border-color:var(--coral);background:#fff}
+  .chip{display:inline-flex;align-items:center;gap:7px;background:#F3EADB;border:1px solid var(--line);
+    border-radius:999px;padding:6px 12px;font-weight:700;font-size:12.5px}
+  .swatch{width:14px;height:14px;border-radius:50%;background:linear-gradient(135deg,var(--coral),var(--green))}
+  .prompt-box{background:#2C2722;color:#F1E7D8;border-radius:var(--r-sm);padding:12px 13px;
+    font-family:ui-monospace,Menlo,monospace;font-size:12px;line-height:1.5;position:relative;max-height:150px;overflow:auto}
+  .copy{position:absolute;top:8px;right:8px;background:rgba(255,255,255,.12);color:#fff;
+    border-radius:7px;padding:5px 9px;font-size:11px;font-weight:800}
+  .copy:hover{background:rgba(255,255,255,.22)}
+  .row{display:flex;gap:8px;flex-wrap:wrap}
+  .drop{border:2px dashed var(--line);border-radius:var(--r-sm);padding:18px;text-align:center;
+    color:var(--ink-soft);background:var(--paper-2);transition:.15s;cursor:pointer}
+  .drop:hover{border-color:var(--coral);color:var(--coral)}
+  .drop .big{font-size:24px}
+  .uploaded{display:flex;gap:10px;align-items:center;border:1px solid var(--line);border-radius:var(--r-sm);padding:10px}
+  .uploaded .mini{width:64px;height:48px;border-radius:7px;background:center/cover;border:1px solid var(--line)}
+  .soon{font-size:11px;font-weight:800;color:#A98B5e;background:#F6ECDA;border-radius:999px;padding:3px 9px}
+  .divider{height:1px;background:var(--line);margin:2px 0}
+  .note{font-size:12px;color:var(--ink-soft);font-weight:600}
+
+  /* modal */
+  .scrim{position:fixed;inset:0;background:rgba(58,47,42,.42);display:none;align-items:center;
+    justify-content:center;z-index:40;padding:24px}
+  .scrim.open{display:flex}
+  .modal{background:var(--paper);width:min(640px,100%);max-height:88vh;overflow:auto;border-radius:18px;
+    box-shadow:0 24px 70px rgba(0,0,0,.3)}
+  .modal-head{padding:22px 24px 6px;display:flex;justify-content:space-between;align-items:flex-start}
+  .modal-head h2{font-size:22px}
+  .modal-body{padding:6px 24px 24px;display:flex;flex-direction:column;gap:16px}
+  .x{width:32px;height:32px;border-radius:50%;background:#fff;box-shadow:var(--shadow-sm);font-size:16px}
+  .stepnum{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;
+    background:var(--coral);color:#fff;font-size:12px;font-weight:800;margin-right:8px}
+  .pagecount{display:flex;align-items:center;gap:10px}
+  .pagecount input{width:64px;text-align:center;font-weight:800;font-size:15px;padding:8px;
+    border:1px solid var(--line);border-radius:9px;background:#fff}
+
+  .ribbon{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);background:var(--ink);
+    color:#F6EFE2;padding:8px 16px;border-radius:999px;font-size:12.5px;font-weight:700;
+    box-shadow:var(--shadow);z-index:30;opacity:.92}
+  .toast{position:fixed;bottom:60px;left:50%;transform:translateX(-50%) translateY(10px);background:var(--green);
+    color:#fff;padding:10px 18px;border-radius:999px;font-weight:800;font-size:13px;opacity:0;
+    transition:.25s;z-index:50}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand"><span class="logo">📖</span> Playbook&nbsp;Pal</div>
+  <div class="title-edit"><input value="The Meaning of Life" aria-label="Book title" /></div>
+
+  <div style="margin-left:auto;display:flex;gap:10px;align-items:center">
+    <button class="btn btn-ghost" onclick="openSetup()">📖 Story setup</button>
+    <button class="btn btn-ghost" onclick="openStyle()">🎨 Art style</button>
+    <button class="btn btn-primary">Export book ↓</button>
+  </div>
+</header>
+
+<main>
+  <!-- LEFT: page rail -->
+  <section class="col rail">
+    <div class="rail-head"><h3>Pages</h3><span class="muted" style="font-size:12px;font-weight:700">8 pages</span></div>
+    <div class="rail-list" id="rail"></div>
+  </section>
+
+  <!-- CENTER: canvas -->
+  <section class="col stage">
+    <div class="canvas-wrap">
+      <div class="page-canvas" id="canvas">
+        <!-- filled by JS -->
+      </div>
+      <div class="stage-foot">
+        <span id="pageLabel">Page 1 of 8</span>
+        <div class="zoom"><button>−</button><span style="padding:0 4px;align-self:center">100%</span><button>+</button></div>
+        <span class="muted">Click a page on the left to edit it</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- RIGHT: inspector -->
+  <aside class="col inspector">
+    <div class="insp-head">
+      <div class="pg" id="inspPg">Page 1</div>
+      <h2>Page details</h2>
+    </div>
+    <div class="tabs">
+      <div class="tab active" data-tab="words" onclick="tab(this)">Words</div>
+      <div class="tab" data-tab="scene" onclick="tab(this)">Scene</div>
+      <div class="tab" data-tab="art" onclick="tab(this)">Illustration</div>
+    </div>
+
+    <!-- WORDS -->
+    <div class="panel active" data-panel="words">
+      <div class="field">
+        <label>The words on this page</label>
+        <div class="hint">Paste or type the script the reader will see on this page.</div>
+        <textarea rows="6" id="scriptText" placeholder="e.g. We sat on the old bench and wondered: what is it all for?">We sat on the old wooden bench as the sun dipped low, and wondered together — what is it all for?</textarea>
+      </div>
+      <div class="note">Tip: keep it to a sentence or two per page. Add or remove pages anytime from the left.</div>
+    </div>
+
+    <!-- SCENE -->
+    <div class="panel" data-panel="scene">
+      <div class="field">
+        <label>Describe the scene</label>
+        <div class="hint">A few words about what we should see. This becomes your image prompt.</div>
+        <textarea rows="6" placeholder="e.g. Two friends on a park bench at sunset, tall trees, warm sky.">Two friends sitting on a wooden bench under a big leafy tree at golden sunset, soft hills behind, a winding path.</textarea>
+      </div>
+      <div class="note">No need to be fancy — plain words work best.</div>
+    </div>
+
+    <!-- ILLUSTRATION -->
+    <div class="panel" data-panel="art">
+      <div class="chip" onclick="openStyle()" style="cursor:pointer" title="Change art style">
+        <span class="swatch"></span> Style: Folk-art gouache
+        <span style="color:var(--coral);font-weight:800;margin-left:2px">· Change</span>
+      </div>
+
+      <div class="field">
+        <label>1 · Get your image prompt</label>
+        <div class="hint">Copy this into ChatGPT (or your image tool) with the reference image attached.</div>
+        <div class="prompt-box" id="imgPrompt"><button class="copy" onclick="copyPrompt()">Copy</button>Two friends sitting on a wooden bench under a big leafy tree at golden sunset…
+
+STYLE: naive folk-art gouache children's-book illustration, visible brushstrokes, simplified rounded shapes, flat layered composition, matte chalky texture, muted palette, strong silhouettes. NEGATIVE: photorealistic, 3D, cinematic lighting, Pixar/Disney/anime.</div>
+        <div class="row" style="margin-top:10px">
+          <button class="btn btn-ghost" onclick="toast('Reference image downloaded')">⬇ Download reference image</button>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="field">
+        <label>2 · Upload the image you generated</label>
+        <div class="hint">Bring back the picture from ChatGPT and drop it here.</div>
+        <div class="drop" onclick="toast('File picker (demo)')">
+          <div class="big">🖼️</div>
+          <div style="font-weight:800;margin-top:6px">Drag &amp; drop or click to upload</div>
+          <div style="font-size:12px;margin-top:2px">PNG or JPG</div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="field">
+        <label>3 · Vectorize <span class="soon">Phase 1</span></label>
+        <div class="hint">Turn the image into editable shapes you can rearrange. Coming soon.</div>
+        <button class="btn btn-ghost" disabled style="opacity:.55;cursor:not-allowed">✶ Vectorize image</button>
+      </div>
+    </div>
+  </aside>
+</main>
+
+<!-- STORY SETUP MODAL (Step 1) -->
+<div class="scrim" id="setup">
+  <div class="modal">
+    <div class="modal-head">
+      <h2>Start your story</h2>
+      <button class="x" onclick="closeSetup()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label><span class="stepnum">1</span>Your theme (1–2 lines)</label>
+        <textarea rows="2" placeholder="e.g. Me and a friend had a discussion today about the meaning of life.">Me and a friend had a discussion today about the meaning of life.</textarea>
+      </div>
+      <div class="field">
+        <label><span class="stepnum">2</span>Tell us more</label>
+        <div class="hint">What did you talk about? What do you want the story to be around?</div>
+        <textarea rows="4" placeholder="Write more details about what you discussed and what you want the story to be about.">We talked about how meaning comes from small moments and the people we share them with, not grand answers…</textarea>
+      </div>
+      <div class="divider"></div>
+      <div class="field">
+        <label><span class="stepnum">3</span>Get your story-breakdown prompt</label>
+        <div class="hint">Paste this into Claude. It won't write the story for you — it gently nudges you, page by page, using your own notes.</div>
+        <div class="pagecount" style="margin-bottom:10px">
+          <span style="font-weight:800;font-size:13px">Number of pages</span>
+          <input value="8" />
+          <span class="muted" style="font-size:12px;font-weight:700">(default 8 — edit anytime)</span>
+        </div>
+        <div class="prompt-box">You are helping me break MY story idea into a picture-book outline. Do NOT write the full story — give gentle, page-by-page nudges drawn only from my notes, for 8 pages…</div>
+        <div class="row" style="margin-top:10px">
+          <button class="btn btn-ghost" onclick="toast('Prompt copied')">Copy prompt</button>
+          <button class="btn btn-primary" onclick="closeSetup()">I've got my breakdown →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ART STYLE MODAL (a book-wide decision, not a step) -->
+<div class="scrim" id="style">
+  <div class="modal">
+    <div class="modal-head">
+      <h2>Choose your art style</h2>
+      <button class="x" onclick="closeStyle()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="hint" style="margin-top:-4px">Applies to every page in your book and shapes each image prompt. You can change it anytime.</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <div style="border:2px solid var(--coral);border-radius:var(--r);overflow:hidden;background:#fff;box-shadow:0 0 0 3px rgba(212,131,122,.16)">
+          <img src="../reference-image.png" alt="Folk-art gouache reference" style="width:100%;aspect-ratio:4/3;object-fit:cover;display:block" />
+          <div style="padding:11px 13px">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <strong style="font-family:'Fraunces',serif">Folk-art gouache</strong>
+              <span class="soon" style="background:#E7F0EC;color:var(--teal)">✓ Selected</span>
+            </div>
+            <div class="note" style="margin-top:4px">Hand-painted, matte, simplified shapes. Warm and child-friendly.</div>
+          </div>
+        </div>
+        <div style="border:2px dashed var(--line);border-radius:var(--r);background:var(--paper-2);display:grid;place-items:center;color:var(--ink-soft);min-height:160px;text-align:center;padding:18px">
+          <div><div style="font-size:26px">＋</div><div style="font-weight:800;margin-top:6px">More styles</div><div class="note">Coming soon</div></div>
+        </div>
+      </div>
+      <div class="row" style="justify-content:flex-end">
+        <button class="btn btn-primary" onclick="closeStyle()">Done</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="ribbon">Reference UI · MVP · for usability review (not yet functional)</div>
+<div class="toast" id="toast"></div>
+
+<script>
+  // ---- demo data: 8 pages, first blank ----
+  const captions = [
+    "", // page 1 blank
+    "We sat on the old bench and wondered what it all means.",
+    "Maybe meaning isn't a grand answer waiting to be found.",
+    "Maybe it's in the small, shared moments.",
+    "A laugh over coffee. A walk at dusk.",
+    "The people beside us when we ask the big questions.",
+    "We didn't solve it. We didn't need to.",
+    "The sun set, and that was enough."
+  ];
+  // a few sample art swatches (gradients stand in for uploaded images)
+  const arts = [
+    null,
+    "linear-gradient(160deg,#BCD8E0,#E08A7E 70%,#C97A4A)",
+    "linear-gradient(160deg,#CFE0DF,#A9BF86)",
+    "linear-gradient(160deg,#F3C4C9,#E59AAE)",
+    null,
+    "linear-gradient(160deg,#7A9A5E,#3D6B63)",
+    null,
+    "linear-gradient(160deg,#E08A7E,#F3C4C9)"
+  ];
+  let active = 0;
+
+  const rail = document.getElementById('rail');
+  function buildRail(){
+    rail.innerHTML = '';
+    for(let i=0;i<captions.length;i++){
+      const t = document.createElement('div');
+      t.className = 'thumb'+(i===active?' active':'');
+      const pic = arts[i] ? `<div class="pic" style="background-image:${arts[i]}"></div>`
+                          : `<div class="pic"><div class="blank">blank<br>page</div></div>`;
+      t.innerHTML = `<div class="frame"><div class="num">${i+1}</div>${pic}
+        <div class="tools"><button title="Move">⋮⋮</button><button title="Delete" onclick="event.stopPropagation();toast('Delete page (demo)')">🗑</button></div></div>
+        <div class="cap">${captions[i] || 'Add the words…'}</div>`;
+      t.onclick = ()=>{active=i;render();};
+      rail.appendChild(t);
+    }
+    const add = document.createElement('button');
+    add.className='add-page'; add.textContent='＋ Add page';
+    add.onclick=()=>toast('New page added (demo)');
+    rail.appendChild(add);
+  }
+
+  const canvas = document.getElementById('canvas');
+  function render(){
+    buildRail();
+    document.getElementById('pageLabel').textContent = `Page ${active+1} of ${captions.length}`;
+    document.getElementById('inspPg').textContent = `Page ${active+1}`;
+    document.getElementById('scriptText').value = captions[active] || '';
+    if(arts[active]){
+      canvas.innerHTML = `<div class="art" style="background-image:${arts[active]}"></div>`+
+        (captions[active]?`<div class="caption-band">${captions[active]}</div>`:'');
+    } else {
+      canvas.innerHTML = `<div class="empty-state">
+          <div class="empty-ico">🖼️</div>
+          <div style="font-family:'Fraunces',serif;font-size:18px;color:var(--ink)">This page is blank</div>
+          <div style="max-width:260px">Add the words in <b>Words</b>, describe the <b>Scene</b>, then generate a prompt and upload your image under <b>Illustration</b>.</div>
+        </div>`;
+    }
+  }
+
+  function tab(el){
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    el.classList.add('active');
+    const name = el.dataset.tab;
+    document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active', p.dataset.panel===name));
+  }
+  function openSetup(){document.getElementById('setup').classList.add('open');}
+  function closeSetup(){document.getElementById('setup').classList.remove('open');}
+  function openStyle(){document.getElementById('style').classList.add('open');}
+  function closeStyle(){document.getElementById('style').classList.remove('open');}
+  function copyPrompt(){toast('Image prompt copied');}
+  let to;
+  function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');
+    clearTimeout(to);to=setTimeout(()=>t.classList.remove('show'),1600);}
+
+  render();
+</script>
+</body>
+</html>

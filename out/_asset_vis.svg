@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="260" height="430" viewBox="0 0 260 430">
+<defs>
+
+  <!-- gouache: hand-drawn edge displacement + chalky speckle/mottle WITHIN the fill.
+       Replaces the old flat-fill look. Applied per shape-group via id "wobble". -->
+  <filter id="wobble" x="-14%" y="-14%" width="128%" height="128%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.016 0.02" numOctaves="2" seed="8" result="warp"/>
+    <feDisplacementMap in="SourceGraphic" in2="warp" scale="8" xChannelSelector="R" yChannelSelector="G" result="disp"/>
+    <!-- chalky speckle, clipped to the shape, layered over it -->
+    <feTurbulence type="fractalNoise" baseFrequency="0.16 0.2" numOctaves="3" seed="13" result="chalk"/>
+    <feColorMatrix in="chalk" type="matrix"
+      values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.5 0" result="chalkA"/>
+    <feComponentTransfer in="chalkA" result="chalkB">
+      <feFuncA type="linear" slope="0.22" intercept="0"/>
+    </feComponentTransfer>
+    <feComposite in="chalkB" in2="disp" operator="in" result="chalkIn"/>
+    <feMerge>
+      <feMergeNode in="disp"/>
+      <feMergeNode in="chalkIn"/>
+    </feMerge>
+  </filter>
+
+  <!-- finer wobble + light speckle for small elements (leaves, flowers) -->
+  <filter id="wobbleFine" x="-16%" y="-16%" width="132%" height="132%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.05 0.06" numOctaves="2" seed="19" result="warp"/>
+    <feDisplacementMap in="SourceGraphic" in2="warp" scale="3.5" xChannelSelector="R" yChannelSelector="G" result="disp"/>
+    <feTurbulence type="fractalNoise" baseFrequency="0.22" numOctaves="2" seed="25" result="chalk"/>
+    <feColorMatrix in="chalk" type="matrix"
+      values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.5 0" result="chalkA"/>
+    <feComponentTransfer in="chalkA" result="chalkB">
+      <feFuncA type="linear" slope="0.16" intercept="0"/>
+    </feComponentTransfer>
+    <feComposite in="chalkB" in2="disp" operator="in" result="chalkIn"/>
+    <feMerge>
+      <feMergeNode in="disp"/>
+      <feMergeNode in="chalkIn"/>
+    </feMerge>
+  </filter>
+
+  <!-- chalky paper grain, tiled over everything at low opacity -->
+  <filter id="paperGrain" x="0%" y="0%" width="100%" height="100%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="31" result="g"/>
+    <feColorMatrix in="g" type="matrix"
+      values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.7 0" result="ga"/>
+    <feComponentTransfer in="ga" result="grain">
+      <feFuncA type="linear" slope="0.85" intercept="0"/>
+    </feComponentTransfer>
+    <feComposite in="grain" in2="SourceGraphic" operator="in"/>
+  </filter>
+
+  <!-- soft matte blur to knock the digital crispness off fills -->
+  <filter id="matte" x="-6%" y="-6%" width="112%" height="112%">
+    <feGaussianBlur stdDeviation="0.5"/>
+  </filter>
+</defs>
+
+<rect x="0" y="0" width="260" height="430" fill="#BCD8E0" />
+<g transform="translate(130 410) scale(2.2 2.2)" filter="url(#wobble)">
+<g transform="translate(-23 -165)">
+<ellipse cx="24" cy="138" rx="18" ry="15" fill="#5A8597" opacity="0.5" />
+<path d="M 89.55 35.09 C 89.31 33.43 88.17 28.23 86.85 26.38 C 85.53 24.53 82.47 23.08 80.2 22.01 C 77.93 20.95 73.04 18.85 70.86 18.87 C 68.67 18.88 66.53 20.84 64.8 22.13 C 63.06 23.43 60.94 25.43 58.64 28 C 56.34 30.57 51.06 36.17 48.59 40.25 C 46.12 44.33 42.6 51.73 41.2 56.81 C 39.79 61.9 40.24 70.33 38.69 76.14 C 37.13 81.96 32.73 94.41 30.21 97.88 C 27.7 101.35 23.2 98.58 20.93 100.66 C 18.67 102.73 16.17 109.14 14.22 112.55 C 12.26 115.95 8.06 121.62 7.13 124.69 C 6.21 127.76 6.94 131.08 7.7 134.21 C 8.45 137.33 12.03 142.2 12.47 146.76 C 12.92 151.32 10.15 164 10.83 166.39 C 11.51 168.77 15.79 165.87 17.28 163.6 C 18.78 161.33 20.07 152.03 21.36 150.36 C 22.65 148.69 25.59 149.73 26.39 151.83 C 27.19 153.93 25.64 163.43 27.01 165.17 C 28.37 166.91 34.29 167.24 36.05 164.13 C 37.81 161.02 38.46 149.18 39.4 143.2 C 40.34 137.21 41.41 127.93 42.68 121.9 C 43.95 115.88 46.86 106.49 48.36 100.66 C 49.87 94.83 51.86 86.06 53.32 80.74 C 54.77 75.42 57.54 67.98 58.65 63.11 C 59.76 58.23 60.27 49.8 61.12 46.34 C 61.98 42.88 63.64 40.34 64.69 38.67 C 65.73 37.01 66.49 34.58 68.49 34.59 C 70.49 34.6 75.95 38.23 78.8 38.73 C 81.64 39.23 87.05 38.62 88.57 38.11 C 90.09 37.59 89.79 36.76 89.55 35.09 Z" fill="#6F9FB0" />
+<path d="M 23 150 C 23.67 150 25.13 156.13 25 158 C 24.87 159.87 22.67 164 22 164 C 21.33 164 19.87 159.87 20 158 C 20.13 156.13 22.33 150 23 150 Z" fill="#5A8597" opacity="0.45" />
+<ellipse cx="18" cy="118" rx="4.5" ry="4" fill="#5A8597" opacity="0.55" />
+<ellipse cx="27" cy="128" rx="5" ry="4.5" fill="#5A8597" opacity="0.55" />
+<ellipse cx="14" cy="131" rx="4" ry="4" fill="#5A8597" opacity="0.55" />
+<ellipse cx="31" cy="116" rx="4.5" ry="4" fill="#5A8597" opacity="0.55" />
+<ellipse cx="37" cy="125" rx="4" ry="4" fill="#5A8597" opacity="0.55" />
+<ellipse cx="23" cy="108" rx="4.5" ry="4" fill="#5A8597" opacity="0.55" />
+<ellipse cx="33" cy="138" rx="4.5" ry="4" fill="#5A8597" opacity="0.55" />
+<ellipse cx="20" cy="140" rx="4" ry="4" fill="#5A8597" opacity="0.55" />
+<ellipse cx="42" cy="96" rx="4" ry="3.5" fill="#5A8597" opacity="0.55" />
+<ellipse cx="46" cy="78" rx="3.8" ry="3.3" fill="#5A8597" opacity="0.55" />
+<ellipse cx="73" cy="29" rx="2.4" ry="2.4" fill="#3A2F2A" />
+</g>
+</g>
+</svg>
