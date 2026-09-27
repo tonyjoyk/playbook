@@ -92,11 +92,10 @@ export function StorySetupModal({
           <div className="divider" />
           <div className="field">
             <label>
-              <span className="stepnum">3</span>Get your story-breakdown prompt
+              <span className="stepnum">3</span>Write the story
             </label>
             <div className="hint">
-              Paste this into Claude. It won&apos;t write the story for you — it
-              gently nudges you, page by page, using your own notes.
+              The story is written from your theme and from Tell us more.
             </div>
             <div className="pagecount" style={{ marginBottom: 10 }}>
               <span style={{ fontWeight: 800, fontSize: 13 }}>Number of pages</span>
@@ -108,14 +107,8 @@ export function StorySetupModal({
                 onChange={(e) => handlePageCount(e.target.value)}
               />
               <span className="muted" style={{ fontSize: 12, fontWeight: 700 }}>
-                (default 8 — edit anytime)
+                (default 8, edit anytime)
               </span>
-            </div>
-            <div className="prompt-box">
-              <button type="button" className="copy" onClick={() => void copyBreakdown()}>
-                Copy
-              </button>
-              {breakdownPrompt}
             </div>
             {statusLine ? (
               <p className="hint" role="status">
@@ -129,7 +122,7 @@ export function StorySetupModal({
                 disabled={busy || project.theme.trim() === ''}
                 onClick={onGenerate}
               >
-                Generate
+                Write the story
               </button>
               <button type="button" className="btn btn-ghost" onClick={() => void copyBreakdown()}>
                 Copy prompt
