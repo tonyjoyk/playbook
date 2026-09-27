@@ -1,4 +1,11 @@
-import type { Page, Project } from '../types';
+import {
+  ART_STYLE_IDS,
+  type ArtStyleId,
+  type Cast,
+  type CastEntry,
+  type Page,
+  type Project,
+} from '../types';
 
 export function newPageId(): string {
   return `page-${crypto.randomUUID()}`;
@@ -60,11 +67,58 @@ export function createDefaultProject(): Project {
     theme: '',
     detailedWriteup: '',
     breakdownPageCount: 8,
-    artStyleId: 'folk-gouache',
+    artStyleId: 'pencil-sketch',
+    cast: emptyCast(),
     hasViewedIllustrationTab: false,
     hasExported: false,
     pages: [createBlankPage()],
     updatedAt: now,
+  };
+}
+
+export function emptyCast(): Cast {
+  return { characters: [], places: [], objects: [] };
+}
+
+export function isArtStyleId(value: unknown): value is ArtStyleId {
+  return typeof value === 'string' && (ART_STYLE_IDS as readonly string[]).includes(value);
+}
+
+export function generatedImageKey(projectId: string, pageNumber: number): string {
+  return `story/${projectId}/page-${pageNumber}`;
+}
+
+function castEntries(value: unknown): CastEntry[] {
+  if (!Array.isArray(value)) return [];
+  const entries: CastEntry[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue;
+    const rec = item as Record<string, unknown>;
+    if (typeof rec.name !== 'string' || typeof rec.appearance !== 'string') continue;
+    entries.push({ name: rec.name, appearance: rec.appearance });
+  }
+  return entries;
+}
+
+export function normalizeCast(value: unknown): Cast {
+  if (!value || typeof value !== 'object') return emptyCast();
+  const rec = value as Record<string, unknown>;
+  return {
+    characters: castEntries(rec.characters),
+    places: castEntries(rec.places),
+    objects: castEntries(rec.objects),
+  };
+}
+
+export function fitPageCount(project: Project, target: number): Project {
+  const count = Math.min(99, Math.max(1, Math.floor(target)));
+  const pages = project.pages.slice(0, count);
+  while (pages.length < count) pages.push(createBlankPage());
+  return {
+    ...project,
+    breakdownPageCount: count,
+    pages,
+    updatedAt: new Date().toISOString(),
   };
 }
 

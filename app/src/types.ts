@@ -1,4 +1,30 @@
-export type ArtStyleId = 'folk-gouache';
+export const ART_STYLE_IDS = [
+  'folk-gouache',
+  'pencil-sketch',
+  'watercolour-storybook',
+  'simple-cartoon',
+] as const;
+
+export type ArtStyleId = (typeof ART_STYLE_IDS)[number];
+
+export const GENERATED_ART_STYLE_IDS = [
+  'pencil-sketch',
+  'watercolour-storybook',
+  'simple-cartoon',
+] as const;
+
+export type GeneratedArtStyleId = (typeof GENERATED_ART_STYLE_IDS)[number];
+
+export type CastEntry = {
+  name: string;
+  appearance: string;
+};
+
+export type Cast = {
+  characters: CastEntry[];
+  places: CastEntry[];
+  objects: CastEntry[];
+};
 
 export type VectorStatus = 'none' | 'running' | 'done' | 'error';
 
@@ -106,6 +132,7 @@ export type Project = {
   detailedWriteup: string;
   breakdownPageCount: number;
   artStyleId: ArtStyleId;
+  cast: Cast;
   hasViewedIllustrationTab: boolean;
   hasExported: boolean;
   pages: Page[];
