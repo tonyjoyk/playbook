@@ -1,0 +1,17 @@
+{
+  "name": "Playbook",
+  "install": "command -v wasm-pack >/dev/null 2>&1 || curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh\nrustup target add wasm32-unknown-unknown\nnpm ci\nnpm ci --prefix app\nnpm run wasm:build --prefix app\n",
+  "terminals": [
+    {
+      "name": "Playbook Pal",
+      "command": "npm run dev --prefix app -- --host 0.0.0.0 --port 5173",
+      "description": "Vite dev server for the Playbook Pal editor at http://localhost:5173"
+    }
+  ],
+  "ports": [
+    {
+      "name": "Playbook Pal",
+      "port": 5173
+    }
+  ]
+}
