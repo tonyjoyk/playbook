@@ -7,13 +7,14 @@ import {
 } from '../src/lib/prompts.ts';
 import type { Cast, CastEntry } from '../src/types.ts';
 
-export const IMAGE_MODEL = 'gpt-image-2';
-/** Chat Completions + JSON mode; see https://developers.openai.com/api/docs/models/gpt-4o-mini */
-export const TEXT_MODEL = 'gpt-4o-mini';
+/** Measured 2026-09-27. gemini-3.8-flash returned 503. Flash returned story JSON, then 503. Lite also returned story JSON. */
+const TEXT_MODELS = ['gemini-3.5-flash', 'gemini-3.5-flash-lite'] as const;
+export const TEXT_MODEL = TEXT_MODELS[0];
+/** Listed for generateContent on this key. Free-tier image quota is a separate billing limit. */
+export const IMAGE_MODEL = 'gemini-3.1-flash-image';
 
-const OPENAI_CHAT_URL = 'https://api.openai.com/v1/chat/completions';
-const OPENAI_GENERATIONS_URL = 'https://api.openai.com/v1/images/generations';
-const OPENAI_EDITS_URL = 'https://api.openai.com/v1/images/edits';
+const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
+const MISSING_KEY = 'Add GEMINI_API_KEY to app/.env and restart.';
 
 type FailBody = { ok: false; message: string };
 
@@ -24,7 +25,7 @@ type StoryPage = {
 };
 
 function apiKey(): string | undefined {
-  const key = process.env.OPENAI_API_KEY;
+  const key = process.env.GEMINI_API_KEY;
   if (typeof key !== 'string') return undefined;
   const trimmed = key.trim();
   return trimmed.length > 0 ? trimmed : undefined;
@@ -97,58 +98,110 @@ function parseStoryPages(value: unknown, expectedCount: number): StoryPage[] | n
   return pages;
 }
 
-function openAiErrorMessage(payload: unknown, fallback: string): string {
+function providerErrorMessage(payload: unknown, fallback: string): string {
   if (isRecord(payload) && isRecord(payload.error) && typeof payload.error.message === 'string') {
-    return payload.error.message;
+    const line = payload.error.message
+      .split('\n')
+      .map((part) => part.trim())
+      .find((part) => part.length > 0);
+    return line && line.length > 0 ? line : fallback;
   }
   return fallback;
 }
 
-async function callOpenAiChat(prompt: string, key: string): Promise<{ ok: true; text: string } | { ok: false; message: string }> {
+async function callGemini(
+  model: string,
+  body: Record<string, unknown>,
+  key: string,
+  unreachable: string,
+): Promise<{ ok: true; payload: unknown } | { ok: false; message: string }> {
   let response: Response;
   try {
-    response = await fetch(OPENAI_CHAT_URL, {
+    response = await fetch(`${GEMINI_URL}/${model}:generateContent`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${key}`,
+        'x-goog-api-key': key,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        model: TEXT_MODEL,
-        messages: [{ role: 'user', content: prompt }],
-        response_format: { type: 'json_object' },
-      }),
+      body: JSON.stringify(body),
     });
   } catch {
-    return { ok: false, message: 'Could not reach OpenAI for the story request.' };
+    return { ok: false, message: unreachable };
   }
 
   let payload: unknown;
   try {
     payload = await response.json();
   } catch {
-    return { ok: false, message: 'OpenAI returned a story response that could not be read.' };
+    return { ok: false, message: 'Gemini returned a response that could not be read.' };
   }
 
   if (!response.ok) {
-    return {
-      ok: false,
-      message: openAiErrorMessage(payload, 'OpenAI could not generate the story.'),
-    };
+    return { ok: false, message: providerErrorMessage(payload, 'Gemini could not complete the request.') };
   }
 
-  if (
-    !isRecord(payload) ||
-    !Array.isArray(payload.choices) ||
-    payload.choices.length === 0 ||
-    !isRecord(payload.choices[0]) ||
-    !isRecord(payload.choices[0].message) ||
-    typeof payload.choices[0].message.content !== 'string'
-  ) {
-    return { ok: false, message: 'OpenAI returned a story in an unexpected shape.' };
-  }
+  return { ok: true, payload };
+}
 
-  return { ok: true, text: payload.choices[0].message.content };
+function textFromGemini(payload: unknown): string | null {
+  if (!isRecord(payload) || !Array.isArray(payload.candidates) || payload.candidates.length === 0) {
+    return null;
+  }
+  const candidate = payload.candidates[0];
+  if (!isRecord(candidate) || !isRecord(candidate.content) || !Array.isArray(candidate.content.parts)) {
+    return null;
+  }
+  const texts = candidate.content.parts
+    .filter((part): part is Record<string, unknown> => isRecord(part) && typeof part.text === 'string')
+    .map((part) => part.text as string);
+  if (texts.length === 0) return null;
+  return texts.join('');
+}
+
+function pngBase64FromGemini(payload: unknown): string | null {
+  if (!isRecord(payload) || !Array.isArray(payload.candidates) || payload.candidates.length === 0) {
+    return null;
+  }
+  const candidate = payload.candidates[0];
+  if (!isRecord(candidate) || !isRecord(candidate.content) || !Array.isArray(candidate.content.parts)) {
+    return null;
+  }
+  for (const part of candidate.content.parts) {
+    if (!isRecord(part) || !isRecord(part.inlineData)) continue;
+    const data = part.inlineData.data;
+    const mime = part.inlineData.mimeType;
+    if (typeof data !== 'string' || data.length === 0) continue;
+    if (mime !== 'image/png') continue;
+    return data;
+  }
+  return null;
+}
+
+async function callGeminiChat(
+  prompt: string,
+  key: string,
+): Promise<{ ok: true; text: string } | { ok: false; message: string }> {
+  let last: { ok: false; message: string } = { ok: false, message: 'Gemini could not generate the story.' };
+  for (const model of TEXT_MODELS) {
+    const result = await callGemini(
+      model,
+      {
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: { responseMimeType: 'application/json' },
+      },
+      key,
+      'Could not reach Gemini for the story request.',
+    );
+    if (!result.ok) {
+      last = result;
+      if (!result.message.toLowerCase().includes('high demand')) return result;
+      continue;
+    }
+    const text = textFromGemini(result.payload);
+    if (!text) return { ok: false, message: 'Gemini returned a story in an unexpected shape.' };
+    return { ok: true, text };
+  }
+  return last;
 }
 
 function formatCastSection(label: string, entries: CastEntry[]): string {
@@ -162,6 +215,7 @@ function buildIllustrationPrompt(
   sceneDescription: string,
   script: string,
   cast: Cast,
+  hasReference: boolean,
 ): string {
   const style = styleBlock(artStyleId);
   const castText = [
@@ -169,6 +223,9 @@ function buildIllustrationPrompt(
     formatCastSection('Places', cast.places),
     formatCastSection('Objects', cast.objects),
   ].join('\n\n');
+  const referenceLine = hasReference
+    ? 'Match the characters and drawing style of the attached reference image. Draw this new scene. Do not copy the reference scene.'
+    : '';
 
   return `${style}
 
@@ -176,141 +233,43 @@ Scene: ${sceneDescription.trim()}
 
 ${castText}
 
+${referenceLine}
+
 Story context for this page (do not render these words in the picture): ${script.trim()}`;
 }
 
-function imageBase64FromPayload(payload: unknown): string | null {
-  if (!isRecord(payload) || !Array.isArray(payload.data) || payload.data.length === 0) {
-    return null;
-  }
-  const first = payload.data[0];
-  if (!isRecord(first)) return null;
-  if (typeof first.b64_json === 'string') return first.b64_json;
-  return null;
-}
-
-async function callOpenAiGeneration(
+async function callGeminiImage(
   prompt: string,
+  referencePngBase64: string | null,
   key: string,
 ): Promise<{ ok: true; imageBase64: string } | { ok: false; message: string }> {
-  let response: Response;
-  try {
-    response = await fetch(OPENAI_GENERATIONS_URL, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: IMAGE_MODEL,
-        prompt,
-        n: 1,
-      }),
+  const parts: Array<Record<string, unknown>> = [{ text: prompt }];
+  if (referencePngBase64) {
+    parts.push({
+      inlineData: { mimeType: 'image/png', data: referencePngBase64 },
     });
-  } catch {
-    return { ok: false, message: 'Could not reach OpenAI for the illustration request.' };
   }
 
-  let payload: unknown;
-  try {
-    payload = await response.json();
-  } catch {
-    return { ok: false, message: 'OpenAI returned an illustration response that could not be read.' };
-  }
-
-  if (!response.ok) {
-    return {
-      ok: false,
-      message: openAiErrorMessage(payload, 'OpenAI could not generate the illustration.'),
-    };
-  }
-
-  const imageBase64 = imageBase64FromPayload(payload);
-  if (!imageBase64) {
-    return { ok: false, message: 'OpenAI returned an illustration in an unexpected shape.' };
-  }
-
-  return { ok: true, imageBase64 };
-}
-
-function buildMultipartEditsBody(
-  prompt: string,
-  pngBytes: Buffer,
-): { contentType: string; body: Buffer } {
-  const boundary = `----playbook-${crypto.randomUUID()}`;
-  const parts: Buffer[] = [];
-
-  const appendField = (name: string, value: string) => {
-    parts.push(
-      Buffer.from(
-        `--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`,
-      ),
-    );
-  };
-
-  appendField('model', IMAGE_MODEL);
-  appendField('prompt', prompt);
-
-  parts.push(
-    Buffer.from(
-      `--${boundary}\r\nContent-Disposition: form-data; name="image[]"; filename="reference.png"\r\nContent-Type: image/png\r\n\r\n`,
-    ),
+  const result = await callGemini(
+    IMAGE_MODEL,
+    {
+      contents: [{ role: 'user', parts }],
+      generationConfig: { responseModalities: ['IMAGE'] },
+    },
+    key,
+    'Could not reach Gemini for the illustration request.',
   );
-  parts.push(pngBytes);
-  parts.push(Buffer.from(`\r\n--${boundary}--\r\n`));
-
-  return {
-    contentType: `multipart/form-data; boundary=${boundary}`,
-    body: Buffer.concat(parts),
-  };
-}
-
-async function callOpenAiEdit(
-  prompt: string,
-  referencePng: Buffer,
-  key: string,
-): Promise<{ ok: true; imageBase64: string } | { ok: false; message: string }> {
-  const { contentType, body } = buildMultipartEditsBody(prompt, referencePng);
-
-  let response: Response;
-  try {
-    response = await fetch(OPENAI_EDITS_URL, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${key}`,
-        'Content-Type': contentType,
-      },
-      body,
-    });
-  } catch {
-    return { ok: false, message: 'Could not reach OpenAI for the illustration edit request.' };
-  }
-
-  let payload: unknown;
-  try {
-    payload = await response.json();
-  } catch {
-    return { ok: false, message: 'OpenAI returned an illustration edit response that could not be read.' };
-  }
-
-  if (!response.ok) {
-    return {
-      ok: false,
-      message: openAiErrorMessage(payload, 'OpenAI could not edit the illustration.'),
-    };
-  }
-
-  const imageBase64 = imageBase64FromPayload(payload);
+  if (!result.ok) return result;
+  const imageBase64 = pngBase64FromGemini(result.payload);
   if (!imageBase64) {
-    return { ok: false, message: 'OpenAI returned an edited illustration in an unexpected shape.' };
+    return { ok: false, message: 'Gemini returned an illustration in an unexpected shape.' };
   }
-
   return { ok: true, imageBase64 };
 }
 
 async function handleHealth(_req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (!apiKey()) {
-    fail(res, 503, 'Add OPENAI_API_KEY to app/.env and restart.');
+    fail(res, 503, MISSING_KEY);
     return;
   }
   sendJson(res, 200, { ok: true });
@@ -319,7 +278,7 @@ async function handleHealth(_req: IncomingMessage, res: ServerResponse): Promise
 async function handleStory(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const key = apiKey();
   if (!key) {
-    fail(res, 503, 'Add OPENAI_API_KEY to app/.env and restart.');
+    fail(res, 503, MISSING_KEY);
     return;
   }
 
@@ -367,7 +326,7 @@ async function handleStory(req: IncomingMessage, res: ServerResponse): Promise<v
     pageCount: breakdownPageCount,
   });
 
-  const chatResult = await callOpenAiChat(prompt, key);
+  const chatResult = await callGeminiChat(prompt, key);
   if (!chatResult.ok) {
     fail(res, 502, chatResult.message);
     return;
@@ -377,19 +336,19 @@ async function handleStory(req: IncomingMessage, res: ServerResponse): Promise<v
   try {
     parsed = JSON.parse(chatResult.text) as unknown;
   } catch {
-    fail(res, 502, 'OpenAI returned story JSON that could not be parsed.');
+    fail(res, 502, 'Gemini returned story JSON that could not be parsed.');
     return;
   }
 
   if (!isRecord(parsed)) {
-    fail(res, 502, 'OpenAI returned story JSON in an unexpected shape.');
+    fail(res, 502, 'Gemini returned story JSON in an unexpected shape.');
     return;
   }
 
   const cast = parseCast(parsed.cast);
   const pages = parseStoryPages(parsed.pages, breakdownPageCount);
   if (!cast || !pages) {
-    fail(res, 502, 'OpenAI returned story JSON in an unexpected shape.');
+    fail(res, 502, 'Gemini returned story JSON in an unexpected shape.');
     return;
   }
 
@@ -399,7 +358,7 @@ async function handleStory(req: IncomingMessage, res: ServerResponse): Promise<v
 async function handleIllustration(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const key = apiKey();
   if (!key) {
-    fail(res, 503, 'Add OPENAI_API_KEY to app/.env and restart.');
+    fail(res, 503, MISSING_KEY);
     return;
   }
 
@@ -448,27 +407,20 @@ async function handleIllustration(req: IncomingMessage, res: ServerResponse): Pr
     return;
   }
 
-  const prompt = buildIllustrationPrompt(artStyleId, sceneDescription, script, cast);
-
-  let imageResult: { ok: true; imageBase64: string } | { ok: false; message: string };
-
-  if (referenceImageBase64 === null) {
-    imageResult = await callOpenAiGeneration(prompt, key);
-  } else {
-    let referencePng: Buffer;
-    try {
-      referencePng = Buffer.from(referenceImageBase64, 'base64');
-    } catch {
-      fail(res, 400, 'The reference image base64 could not be decoded.');
-      return;
-    }
-    if (referencePng.length === 0) {
-      fail(res, 400, 'The reference image base64 could not be decoded.');
-      return;
-    }
-    imageResult = await callOpenAiEdit(prompt, referencePng, key);
+  if (typeof referenceImageBase64 === 'string' && referenceImageBase64.length === 0) {
+    fail(res, 400, 'The reference image base64 could not be decoded.');
+    return;
   }
 
+  const prompt = buildIllustrationPrompt(
+    artStyleId,
+    sceneDescription,
+    script,
+    cast,
+    typeof referenceImageBase64 === 'string',
+  );
+
+  const imageResult = await callGeminiImage(prompt, referenceImageBase64, key);
   if (!imageResult.ok) {
     fail(res, 502, imageResult.message);
     return;
