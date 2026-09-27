@@ -32,10 +32,19 @@ import {
   createBlankPage,
   createDefaultProject,
   ensurePageCount,
+  fitPageCount,
+  generatedImageKey,
   newImageId,
   newSceneId,
   newVectorId,
+  normalizeCast,
 } from '../lib/project';
+import { isGeneratedArtStyleId } from '../lib/prompts';
+import {
+  checkGenerationHealth,
+  requestIllustration,
+  requestStory,
+} from '../lib/generationClient';
 import {
   deleteImage,
   deleteScene,
@@ -59,6 +68,14 @@ import {
   type CompositeMap,
   type CompositePreviewUrls,
 } from './useCompositeProject';
+
+export type GenerationResult = { ok: true } | { ok: false; message: string };
+
+export type GenerationStatus =
+  | { phase: 'idle' }
+  | { phase: 'story' }
+  | { phase: 'illustration'; pageNumber: number; total: number }
+  | { phase: 'error'; message: string; pageIndex: number | null };
 
 export type ImageUrls = Record<string, string>;
 export type VectorUrls = Record<string, string>;
@@ -136,7 +153,33 @@ export type UseProjectReturn = {
   canRedoComposite: (pageId: string) => boolean;
   getFlattenedBlob: (page: Page) => Promise<Blob | null>;
   markExported: () => void;
+  generationStatus: GenerationStatus;
+  generateStory: () => Promise<GenerationResult>;
+  retryIllustration: (pageIndex: number) => Promise<GenerationResult>;
 };
+
+function base64ToPng(imageBase64: string): Blob {
+  const binary = atob(imageBase64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new Blob([bytes], { type: 'image/png' });
+}
+
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result !== 'string') {
+        reject(new Error('Could not read the picture.'));
+        return;
+      }
+      const comma = reader.result.indexOf(',');
+      resolve(comma >= 0 ? reader.result.slice(comma + 1) : reader.result);
+    };
+    reader.onerror = () => reject(reader.error ?? new Error('Could not read the picture.'));
+    reader.readAsDataURL(blob);
+  });
+}
 
 function persistProject(project: Project): Project {
   const updated = { ...project, updatedAt: new Date().toISOString() };
@@ -179,6 +222,12 @@ export function useProject(): UseProjectReturn {
   const [scenes, setScenes] = useState<SceneMap>({});
   const [vectorizeStage, setVectorizeStage] = useState<VectorizeStage | null>(null);
   const [storyModalOpen, setStoryModalOpen] = useState(false);
+  const [generationStatus, setGenerationStatus] = useState<GenerationStatus>({ phase: 'idle' });
+  const projectRef = useRef(project);
+  const generationLock = useRef(false);
+  useEffect(() => {
+    if (!generationLock.current) projectRef.current = project;
+  }, [project]);
   const [styleModalOpen, setStyleModalOpen] = useState(false);
   const [rasterLightboxUrl, setRasterLightboxUrl] = useState<string | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -833,6 +882,214 @@ export function useProject(): UseProjectReturn {
     [project.pages, getHistory, bumpHistory, applyScene]
   );
 
+  const releaseDrawnAssets = useCallback(
+    (page: Page) => {
+      if (page.vectorId) {
+        void deleteSvg(page.vectorId);
+        const vectorUrl = vectorUrlsRef.current[page.vectorId];
+        if (vectorUrl) {
+          URL.revokeObjectURL(vectorUrl);
+          delete vectorUrlsRef.current[page.vectorId];
+        }
+      }
+      if (page.sceneId) {
+        void deleteScene(page.sceneId);
+        delete scenesRef.current[page.sceneId];
+      }
+      void composite.clearCompositeAssets(page);
+    },
+    [composite]
+  );
+
+  const storeGeneratedIllustration = useCallback(
+    async (base: Project, pageIndex: number, imageBase64: string): Promise<Project> => {
+      const page = base.pages[pageIndex];
+      const imageId = generatedImageKey(base.id, pageIndex + 1);
+      const blob = base64ToPng(imageBase64);
+      await saveImage(imageId, blob);
+      if (page.imageId && page.imageId !== imageId) {
+        void deleteImage(page.imageId);
+        const oldUrl = imageUrlsRef.current[page.imageId];
+        if (oldUrl) {
+          URL.revokeObjectURL(oldUrl);
+          delete imageUrlsRef.current[page.imageId];
+        }
+      }
+      const sameUrl = imageUrlsRef.current[imageId];
+      if (sameUrl) URL.revokeObjectURL(sameUrl);
+      releaseDrawnAssets(page);
+      imageUrlsRef.current[imageId] = imageObjectUrl(blob);
+      setImageUrls({ ...imageUrlsRef.current });
+      setVectorUrls({ ...vectorUrlsRef.current });
+      setScenes({ ...scenesRef.current });
+      const next = persistProject({
+        ...base,
+        pages: base.pages.map((item, index) =>
+          index === pageIndex
+            ? {
+                ...item,
+                imageId,
+                vectorId: null,
+                vectorStatus: 'none',
+                vectorError: undefined,
+                displayMode: 'raster',
+                sceneId: null,
+                sceneStatus: 'none',
+                sceneError: undefined,
+                canvasMode: 'view',
+                selectedObjectId: null,
+                selectedObjectIds: [],
+                uploadTier: 'folk-art',
+                uploadTierOverride: null,
+                compositeId: null,
+                compositeStatus: 'none',
+                compositeError: undefined,
+                editRegion: 'full',
+                selectedLayerId: null,
+                editStage: null,
+              }
+            : item
+        ),
+      });
+      setProject(next);
+      projectRef.current = next;
+      setActivePageIndex(pageIndex);
+      return next;
+    },
+    [releaseDrawnAssets, setProject]
+  );
+
+  const illustratePage = useCallback(
+    async (pageIndex: number): Promise<GenerationResult> => {
+      const current = projectRef.current;
+      const page = current.pages[pageIndex];
+      if (!page) return { ok: false, message: 'That page is not in the story.' };
+      if (!isGeneratedArtStyleId(current.artStyleId)) {
+        return {
+          ok: false,
+          message: 'Choose pencil sketch, watercolour, or simple cartoon before generating.',
+        };
+      }
+      let referenceImageBase64: string | null = null;
+      if (pageIndex > 0) {
+        const first = current.pages[0];
+        const blob = first?.imageId ? await loadImage(first.imageId) : null;
+        if (!blob) {
+          return { ok: false, message: 'Page 1 has no picture to use as a reference.' };
+        }
+        referenceImageBase64 = await blobToBase64(blob);
+      }
+      setGenerationStatus({
+        phase: 'illustration',
+        pageNumber: pageIndex + 1,
+        total: current.pages.length,
+      });
+      const illustrated = await requestIllustration({
+        artStyleId: current.artStyleId,
+        sceneDescription: page.sceneDescription,
+        script: page.script,
+        cast: current.cast,
+        referenceImageBase64,
+      });
+      if (!illustrated.ok) return illustrated;
+      await storeGeneratedIllustration(projectRef.current, pageIndex, illustrated.imageBase64);
+      return { ok: true };
+    },
+    [storeGeneratedIllustration]
+  );
+
+  const generateStory = useCallback(async (): Promise<GenerationResult> => {
+    if (generationLock.current) {
+      return { ok: false, message: 'Generation is already running.' };
+    }
+    const current = projectRef.current;
+    if (!current.theme.trim()) {
+      const message = 'Add a theme before generating.';
+      setGenerationStatus({ phase: 'error', message, pageIndex: null });
+      return { ok: false, message };
+    }
+    if (!isGeneratedArtStyleId(current.artStyleId)) {
+      const message = 'Choose pencil sketch, watercolour, or simple cartoon before generating.';
+      setGenerationStatus({ phase: 'error', message, pageIndex: null });
+      return { ok: false, message };
+    }
+    generationLock.current = true;
+    setGenerationStatus({ phase: 'story' });
+    try {
+      const health = await checkGenerationHealth();
+      if (!health.ok) {
+        setGenerationStatus({ phase: 'error', message: health.message, pageIndex: null });
+        return health;
+      }
+      const story = await requestStory({
+        theme: current.theme,
+        detailedWriteup: current.detailedWriteup,
+        breakdownPageCount: current.breakdownPageCount,
+        artStyleId: current.artStyleId,
+      });
+      if (!story.ok) {
+        setGenerationStatus({ phase: 'error', message: story.message, pageIndex: null });
+        return story;
+      }
+      const dropped = current.pages.slice(story.pages.length);
+      for (const page of dropped) {
+        clearPageAssets(page, imageUrlsRef.current, vectorUrlsRef.current, scenesRef.current);
+        void composite.clearCompositeAssets(page);
+      }
+      const fitted = fitPageCount(current, story.pages.length);
+      const withText = persistProject({
+        ...fitted,
+        cast: normalizeCast(story.cast),
+        pages: fitted.pages.map((page, index) => ({
+          ...page,
+          script: story.pages[index].script,
+          sceneDescription: story.pages[index].sceneDescription,
+        })),
+      });
+      setProject(withText);
+      projectRef.current = withText;
+      setImageUrls({ ...imageUrlsRef.current });
+      setStoryModalOpen(false);
+      markStorySetupSeen();
+      for (let index = 0; index < withText.pages.length; index++) {
+        const drawn = await illustratePage(index);
+        if (!drawn.ok) {
+          setGenerationStatus({ phase: 'error', message: drawn.message, pageIndex: index });
+          return drawn;
+        }
+      }
+      setGenerationStatus({ phase: 'idle' });
+      return { ok: true };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Generation failed.';
+      setGenerationStatus({ phase: 'error', message, pageIndex: null });
+      return { ok: false, message };
+    } finally {
+      generationLock.current = false;
+    }
+  }, [composite, illustratePage, setProject]);
+
+  const retryIllustration = useCallback(
+    async (pageIndex: number): Promise<GenerationResult> => {
+      if (generationLock.current) {
+        return { ok: false, message: 'Generation is already running.' };
+      }
+      generationLock.current = true;
+      try {
+        const drawn = await illustratePage(pageIndex);
+        if (!drawn.ok) {
+          setGenerationStatus({ phase: 'error', message: drawn.message, pageIndex });
+          return drawn;
+        }
+        setGenerationStatus({ phase: 'idle' });
+        return { ok: true };
+      } finally {
+        generationLock.current = false;
+      }
+    },
+    [illustratePage]
+  );
+
   const markExported = useCallback(() => {
     setProject((p) => persistProject({ ...p, hasExported: true }));
   }, [setProject]);
@@ -897,5 +1154,8 @@ export function useProject(): UseProjectReturn {
     canRedoComposite: composite.canRedoComposite,
     getFlattenedBlob: composite.getFlattenedBlob,
     markExported,
+    generationStatus,
+    generateStory,
+    retryIllustration,
   };
 }

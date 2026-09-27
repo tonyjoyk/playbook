@@ -8,6 +8,24 @@ export type ArtStyle = {
 };
 
 export const ART_STYLES: Record<ArtStyleId, ArtStyle> = {
+  'pencil-sketch': {
+    id: 'pencil-sketch',
+    name: 'Pencil sketch',
+    description: "Black-and-white pencil. Simple children's-book drawings with clear shapes.",
+    referenceImageUrl: '',
+  },
+  'watercolour-storybook': {
+    id: 'watercolour-storybook',
+    name: 'Watercolour storybook',
+    description: "Soft watercolour. The same simplicity, still a children's book.",
+    referenceImageUrl: '',
+  },
+  'simple-cartoon': {
+    id: 'simple-cartoon',
+    name: 'Simple cartoon',
+    description: "Bold simple shapes. A children's book, not a comedy animation frame.",
+    referenceImageUrl: '',
+  },
   'folk-gouache': {
     id: 'folk-gouache',
     name: 'Folk-art gouache',

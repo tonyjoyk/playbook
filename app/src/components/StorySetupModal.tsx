@@ -1,5 +1,6 @@
 import { buildBreakdownPrompt } from '../lib/prompts';
 import { copyToClipboard } from '../lib/clipboard';
+import type { GenerationStatus } from '../hooks/useProject';
 import type { Project } from '../types';
 
 type StorySetupModalProps = {
@@ -7,6 +8,8 @@ type StorySetupModalProps = {
   project: Project;
   onClose: () => void;
   onChange: (patch: Partial<Project>) => void;
+  onGenerate: () => void;
+  generationStatus: GenerationStatus;
   showToast: (msg: string) => void;
 };
 
@@ -15,8 +18,17 @@ export function StorySetupModal({
   project,
   onClose,
   onChange,
+  onGenerate,
+  generationStatus,
   showToast,
 }: StorySetupModalProps) {
+  const busy = generationStatus.phase === 'story' || generationStatus.phase === 'illustration';
+  const statusLine =
+    generationStatus.phase === 'error'
+      ? generationStatus.message
+      : generationStatus.phase === 'story'
+        ? 'Writing the story.'
+        : null;
   const breakdownPrompt = buildBreakdownPrompt({
     theme: project.theme,
     detailedWriteup: project.detailedWriteup,
@@ -80,11 +92,10 @@ export function StorySetupModal({
           <div className="divider" />
           <div className="field">
             <label>
-              <span className="stepnum">3</span>Get your story-breakdown prompt
+              <span className="stepnum">3</span>Write the story
             </label>
             <div className="hint">
-              Paste this into Claude. It won&apos;t write the story for you — it
-              gently nudges you, page by page, using your own notes.
+              The story is written from your theme and from Tell us more.
             </div>
             <div className="pagecount" style={{ marginBottom: 10 }}>
               <span style={{ fontWeight: 800, fontSize: 13 }}>Number of pages</span>
@@ -96,21 +107,25 @@ export function StorySetupModal({
                 onChange={(e) => handlePageCount(e.target.value)}
               />
               <span className="muted" style={{ fontSize: 12, fontWeight: 700 }}>
-                (default 8 — edit anytime)
+                (default 8, edit anytime)
               </span>
             </div>
-            <div className="prompt-box">
-              <button type="button" className="copy" onClick={() => void copyBreakdown()}>
-                Copy
-              </button>
-              {breakdownPrompt}
-            </div>
+            {statusLine ? (
+              <p className="hint" role="status">
+                {statusLine}
+              </p>
+            ) : null}
             <div className="row" style={{ marginTop: 10 }}>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={busy || project.theme.trim() === ''}
+                onClick={onGenerate}
+              >
+                Write the story
+              </button>
               <button type="button" className="btn btn-ghost" onClick={() => void copyBreakdown()}>
                 Copy prompt
-              </button>
-              <button type="button" className="btn btn-primary" onClick={onClose}>
-                I&apos;ve got my breakdown →
               </button>
             </div>
           </div>

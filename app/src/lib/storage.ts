@@ -7,7 +7,7 @@ import type {
   UploadTier,
   VectorStatus,
 } from '../types';
-import { createBlankPage, createDefaultProject } from './project';
+import { createBlankPage, createDefaultProject, isArtStyleId, normalizeCast } from './project';
 
 const PROJECT_KEY = 'playbook-pal:project';
 const DB_NAME = 'playbook-pal';
@@ -87,7 +87,8 @@ export function loadProject(): Project | null {
       hasViewedIllustrationTab: parsed.hasViewedIllustrationTab ?? false,
       hasExported: parsed.hasExported ?? false,
       breakdownPageCount: parsed.breakdownPageCount ?? 8,
-      artStyleId: parsed.artStyleId ?? 'folk-gouache',
+      artStyleId: isArtStyleId(parsed.artStyleId) ? parsed.artStyleId : 'pencil-sketch',
+      cast: normalizeCast(parsed.cast),
     };
   } catch {
     return null;

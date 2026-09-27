@@ -1,3 +1,49 @@
+import type { ArtStyleId, GeneratedArtStyleId } from '../types';
+import { GENERATED_ART_STYLE_IDS } from '../types';
+
+const GENERATED_STYLE_BLOCKS: Record<GeneratedArtStyleId, string> = {
+  'pencil-sketch':
+    'STYLE: Black-and-white children\'s-book pencil sketch. Simple drawings, clear shapes, little background noise. NEGATIVE: photorealistic, 3D render, colour, rendered story sentences, a different style.',
+  'watercolour-storybook':
+    'STYLE: Soft watercolour children\'s-book illustration. Simple shapes, the same characters on every page. NEGATIVE: photorealistic, 3D render, rendered story sentences, a different style.',
+  'simple-cartoon':
+    'STYLE: Bold simple cartoon shapes for a children\'s book. Not a comedy animation frame. NEGATIVE: photorealistic, 3D render, rendered story sentences, a different style.',
+};
+
+export function isGeneratedArtStyleId(value: unknown): value is GeneratedArtStyleId {
+  return (
+    typeof value === 'string' &&
+    (GENERATED_ART_STYLE_IDS as readonly string[]).includes(value)
+  );
+}
+
+export function styleBlock(artStyleId: ArtStyleId): string {
+  if (!isGeneratedArtStyleId(artStyleId)) {
+    throw new Error('folk-gouache is not a generated style');
+  }
+  return GENERATED_STYLE_BLOCKS[artStyleId];
+}
+
+export function buildGeneratedStoryPrompt({
+  theme,
+  detailedWriteup,
+  pageCount,
+}: {
+  theme: string;
+  detailedWriteup: string;
+  pageCount: number;
+}): string {
+  const notes = detailedWriteup.trim() || '(no extra notes)';
+  return `Write one children's picture book. Stay faithful to the theme and notes. You may add connective tissue. Do not replace the premise. Short warm concrete prose a person can read aloud. Not an outline. Not a moral unless the notes asked for one.
+
+Theme: ${theme}
+Notes: ${notes}
+
+Return JSON only, no markdown. The object has "cast" and "pages".
+cast is { "characters": [{"name","appearance"}], "places": [{"name","appearance"}], "objects": [{"name","appearance"}] }.
+pages has exactly ${pageCount} items, in order. Each item is { "pageNumber": n, "script": "story text", "sceneDescription": "what the picture shows" }. pageNumber starts at 1. sceneDescription does not ask for words drawn in the picture.`;
+}
+
 export function buildBreakdownPrompt({
   theme,
   detailedWriteup,
